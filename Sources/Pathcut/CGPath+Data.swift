@@ -7,12 +7,6 @@ public enum Errors: Error {
     case unsupportedPathCommand(String)
 }
 
-public struct CGCurvePoint {
-    let point: CGPoint
-    let control1: CGPoint
-    let control2: CGPoint
-}
-
 public extension CGPoint {
     init(data: String) throws {
         let values = data.components(separatedBy: ",")
@@ -30,7 +24,7 @@ public extension CGPoint {
 public extension CGMutablePath {
     var data: String {
         var result:[String] = []
-        self.applyWithBlock {
+        applyWithBlock {
             let elem = $0.pointee
             switch elem.type {
             case .moveToPoint:
@@ -115,11 +109,5 @@ public extension CGMutablePath {
                 lastPoint = points[points.count - 1]
             }
         }
-    }
-}
-
-public extension CGMutablePath {
-    func intersections(with: CGPath) -> [CGCurvePoint] {
-       return []
     }
 }
