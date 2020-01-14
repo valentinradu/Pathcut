@@ -25,7 +25,7 @@ let package = Package(
             name: "Pathcut",
             dependencies: []),
         .testTarget(
-            name: "PathcutTests",
+            name: "CGPathTests",
             dependencies: ["Pathcut"]),
     ]
 )
