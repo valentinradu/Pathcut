@@ -63,24 +63,23 @@ public struct CGSpline {
         self.kind = kind
         self.points = Array(points.prefix(count))
 
+        let horizontal = points.reduce(true, {$0 && $1.y == points[0].y})
+        let vertical = points.reduce(true, {$0 && $1.x == points[0].x})
+
         if points.count < 2 {
             self.collinearity = Collinearity(kind: .point)
         }
-        else if points[0].x == points[1].x || points[0].y == points[1].y {
-            let horizontal = points.reduce(true, {$0 && $1.y == points[0].y})
-            let vertical = points.reduce(true, {$0 && $1.x == points[0].x})
-            if horizontal && vertical {
-                self.collinearity = Collinearity(kind: .point)
-            }
-            else if horizontal {
-                self.collinearity = Collinearity(kind: .horizontal)
-            }
-            else {
-                self.collinearity = Collinearity(kind: .vertical)
-            }
+        else if horizontal && vertical {
+            self.collinearity = Collinearity(kind: .point)
+        }
+        else if horizontal {
+            self.collinearity = Collinearity(kind: .horizontal)
+        }
+        else if vertical {
+            self.collinearity = Collinearity(kind: .vertical)
         }
         else {
-            let m = Double((points[0].y - points[1].y)/(points[0].x - points[1].x))
+            let m = Double((points[0].y - points[points.count - 1].y)/(points[0].x - points[points.count - 1].x))
             let b = Double(points[0].y) - m * Double(points[0].x)
             let factor = pow(10.0, Double(places))
             for point in points {
@@ -98,7 +97,7 @@ public struct CGSpline {
             return []
         }
 
-        let group = [self, spline].sorted(by: {$0.kind.rawValue < $1.kind.rawValue})
+        let group = [self, spline].sorted(by: {$0.collinearity.kind.rawValue < $1.collinearity.kind.rawValue})
 
         if (group[0].collinearity.kind == .point)
             || (group[0].collinearity.kind == .horizontal && group[1].collinearity.kind == .horizontal)
@@ -131,17 +130,28 @@ public struct CGSpline {
             else if (collinearity.kind == .slope || spline.collinearity.kind == .slope) {
                 let c = collinearity
                 let oc = spline.collinearity
-                let x = (oc.b - c.b)/(c.m - oc.m)
-                let y = x * c.m + c.b
-                intersectionPoint = CGPoint(x: x, y: y)
+                if c.m != oc.m || c.b != oc.b {
+                    let x = (oc.b - c.b)/(c.m - oc.m)
+                    let y = x * c.m + c.b
+                    intersectionPoint = CGPoint(x: x, y: y)
+                }
             }
 
             if let intersectionPoint = intersectionPoint {
-                let ad = points[0].distanceTo(intersectionPoint)
-                let bd = points[0].distanceTo(points[1])
-                let cd = points[1].distanceTo(intersectionPoint)
+                var isOnBothSplines = true
 
-                if pow(ad, 2) + pow(bd, 2) >= pow(cd, 2) && pow(ad, 2) + pow(cd, 2) >= pow(bd, 2) {
+                for s in group {
+                    let ad = s.points[0].distanceTo(intersectionPoint)
+                    let bd = s.points[0].distanceTo(s.points[s.points.count - 1])
+                    let cd = s.points[s.points.count - 1].distanceTo(intersectionPoint)
+
+                    if pow(ad, 2) + pow(bd, 2) < pow(cd, 2) || pow(ad, 2) + pow(cd, 2) > pow(bd, 2) {
+                        isOnBothSplines = false
+                        break
+                    }
+                }
+
+                if isOnBothSplines {
                     return [CGSplitPoint(kind: .simple, points: [intersectionPoint])]
                 }
                 else {

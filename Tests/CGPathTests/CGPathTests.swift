@@ -77,7 +77,7 @@ final class CGPathTests: XCTestCase {
         XCTAssertEqual(slope.intersections(with: vertical), [intersectionPoint])
         XCTAssertEqual(slope.intersections(with: horizontal), [intersectionPoint])
         XCTAssertEqual(slope.intersections(with: slope), [])
-        XCTAssertEqual(slope.intersections(with: curve), [])
+        XCTAssertEqual(slope.intersections(with: curve), [intersectionPoint])
         XCTAssertEqual(slope.intersections(with: outside), [])
         XCTAssertEqual(curve.intersections(with: horizontal), [intersectionPoint])
     }
