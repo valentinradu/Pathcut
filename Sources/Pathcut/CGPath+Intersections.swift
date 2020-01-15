@@ -7,19 +7,11 @@
 
 import Foundation
 
+
 private let places: Int = 6
 private let maxIters: Int = 500
 
-public struct CGSplitPoint: Equatable {
-    enum Kind {
-        case simple
-        case bezier
-    }
-    let kind: Kind
-    let points: [CGPoint]
-}
-
-public struct CGSpline {
+public struct CGSpline: Equatable {
     enum Kind: Int {
         case line
         case quad
@@ -79,20 +71,67 @@ public struct CGSpline {
             self.collinearity = Collinearity(kind: .vertical)
         }
         else {
-            let m = Double((points[0].y - points[points.count - 1].y)/(points[0].x - points[points.count - 1].x))
-            let b = Double(points[0].y) - m * Double(points[0].x)
-            let factor = pow(10.0, Double(places))
-            for point in points {
-                if Int(Double(point.y) * factor) != Int((m * Double(point.x) + b) * factor) {
-                    self.collinearity = Collinearity(kind: .curve)
-                    return
+            if points[0].x != points[points.count - 1].x {
+                let m = Double((points[0].y - points[points.count - 1].y)/(points[0].x - points[points.count - 1].x))
+                let b = Double(points[0].y) - m * Double(points[0].x)
+                let factor = pow(10.0, Double(places))
+                for point in points {
+                    if Int(Double(point.y) * factor) != Int((m * Double(point.x) + b) * factor) {
+                        self.collinearity = Collinearity(kind: .curve)
+                        return
+                    }
                 }
+                self.collinearity = Collinearity(kind: .slope, m: m, b: b)
             }
-            self.collinearity = Collinearity(kind: .slope, m: m, b: b)
+            else {
+                self.collinearity = Collinearity(kind: .curve)
+            }
         }
     }
 
-    func intersections(with spline: CGSpline) -> [CGSplitPoint] {
+    func split(at: Double) -> (CGSpline, CGSpline)? {
+        precondition(at > 0 && at < 1)
+
+        let ratio = CGFloat(at)
+        var result: (CGSpline, CGSpline)?
+        switch collinearity.kind {
+        case .point:
+            result = nil
+        case .horizontal:
+            fallthrough
+        case .vertical:
+            fallthrough
+        case .slope:
+            let p = lerp(
+                start: points[0],
+                end: points[points.count - 1],
+                t: CGFloat(ratio)
+            )
+            result = (
+                CGSpline(kind: .line, points: [points[0], p]),
+                CGSpline(kind: .line, points: [p, points[points.count - 1]])
+            )
+        case .curve:
+            var localPoints = self.points
+            var firstPoints: [CGPoint] = []
+            var lastPoints: [CGPoint] = []
+            for k in 1..<localPoints.count {
+                for i in 0..<(localPoints.count - k) {
+                    localPoints[i].x = (1.0 - ratio) * localPoints[i].x + ratio * localPoints[i + 1].x;
+                    localPoints[i].y = (1.0 - ratio) * localPoints[i].y + ratio * localPoints[i + 1].y;
+                }
+                firstPoints.append(localPoints[0])
+                lastPoints.append(localPoints[localPoints.count - k - 1])
+            }
+            result = (
+                CGSpline(kind: kind, points: [points[0]] + firstPoints),
+                CGSpline(kind: kind, points: lastPoints.reversed() + [points[points.count - 1]])
+            )
+        }
+        return result
+    }
+
+    func intersections(with spline: CGSpline) -> [CGSpline] {
         if points.count < 2 || spline.points.count < 2 {
             return []
         }
@@ -115,17 +154,11 @@ public struct CGSpline {
                 let x = (y - c.b)/c.m
                 intersectionPoint = CGPoint(x: x, y: y)
             }
-            else if (group[0].collinearity.kind == .horizontal && group[1].collinearity.kind == .curve) {
-                intersectionPoint = .zero //TODO
-            }
             else if (group[0].collinearity.kind == .vertical && group[1].collinearity.kind == .slope) {
                 let x = Double(group[0].points[0].x)
                 let c = group[1].collinearity
                 let y = x * c.m + c.b
                 intersectionPoint = CGPoint(x: x, y: y)
-            }
-            else if (group[0].collinearity.kind == .vertical && group[1].collinearity.kind == .curve) {
-                intersectionPoint = .zero //TODO
             }
             else if (collinearity.kind == .slope || spline.collinearity.kind == .slope) {
                 let c = collinearity
@@ -152,13 +185,23 @@ public struct CGSpline {
                 }
 
                 if isOnBothSplines {
-                    return [CGSplitPoint(kind: .simple, points: [intersectionPoint])]
+                    return [
+                        CGSpline(kind: .line, points: [points[0], intersectionPoint]),
+                        CGSpline(kind: .line, points: [intersectionPoint, points[points.count - 1]])
+                    ]
                 }
                 else {
                     return []
                 }
             }
             else {
+
+//                else if (group[0].collinearity.kind == .horizontal && group[1].collinearity.kind == .curve) {
+//                    intersectionPoint = .zero //TODO
+//                }
+//                else if (group[0].collinearity.kind == .vertical && group[1].collinearity.kind == .curve) {
+//                    intersectionPoint = .zero //TODO
+//                }
                 func hasConverged(range: Range<Double>) -> Bool {
                     let factor = pow(10.0, Double(places))
                     return Int(range.lowerBound * factor) == Int(range.upperBound * factor)
@@ -217,12 +260,12 @@ public extension CGPath {
         return result
     }
 
-    func intersections(with otherPath: CGPath) -> [CGSplitPoint] {
+    func intersections(with otherPath: CGPath) -> [CGSpline] {
         return intersections(with: otherPath.splines)
     }
 
-    func intersections(with otherSplines: [CGSpline]) -> [CGSplitPoint] {
-        var result: [CGSplitPoint] = []
+    func intersections(with otherSplines: [CGSpline]) -> [CGSpline] {
+        var result: [CGSpline] = []
         for spline in splines {
             for otherSpline in otherSplines {
                 result.append(contentsOf: spline.intersections(with: otherSpline))

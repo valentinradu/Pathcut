@@ -71,15 +71,56 @@ final class CGPathTests: XCTestCase {
             .init(x: 6, y: 0)
         ])
         let outside = CGSpline(kind: .line, points: [.init(x: 0, y: 2), .init(x: 2, y: 2)])
-        let intersectionPoint = CGSplitPoint(kind: .simple, points: [CGPoint(x: 4, y: 2)])
+        let intersectionPoint = CGPoint(x: 4, y: 2)
+
+        func splitAt(_ spline: CGSpline, _ point: CGPoint) -> [CGSpline] {
+            return [
+                CGSpline(kind: .line, points: [spline.points[0], point]),
+                CGSpline(kind: .line, points: [point, spline.points[spline.points.count - 1]])
+            ]
+        }
 
         XCTAssertEqual(slope.intersections(with: point), [])
-        XCTAssertEqual(slope.intersections(with: vertical), [intersectionPoint])
-        XCTAssertEqual(slope.intersections(with: horizontal), [intersectionPoint])
+        XCTAssertEqual(slope.intersections(with: vertical), splitAt(slope, intersectionPoint))
+        XCTAssertEqual(slope.intersections(with: horizontal), splitAt(slope, intersectionPoint))
         XCTAssertEqual(slope.intersections(with: slope), [])
-        XCTAssertEqual(slope.intersections(with: curve), [intersectionPoint])
+        XCTAssertEqual(slope.intersections(with: curve), splitAt(slope, intersectionPoint))
         XCTAssertEqual(slope.intersections(with: outside), [])
-        XCTAssertEqual(curve.intersections(with: horizontal), [intersectionPoint])
+        XCTAssertEqual(curve.intersections(with: horizontal), splitAt(curve, intersectionPoint))
+    }
+
+    func testSplinesSplit() {
+        let curve = CGSpline(kind: .curve, points: [
+            .init(x: 0, y: 0),
+            .init(x: 4, y: 2),
+            .init(x: 4, y: 6),
+            .init(x: 0, y: 8)
+        ])
+        if let result = curve.split(at: 0.5) {
+            let firstPoints: [CGPoint] = [
+                .init(x: 0, y: 0),
+                .init(x: 2, y: 1),
+                .init(x: 3, y: 2.5),
+                .init(x: 3, y: 4)
+            ]
+            let lastPoints: [CGPoint] = [
+                .init(x: 3, y: 4),
+                .init(x: 3, y: 5.5),
+                .init(x: 2, y: 7),
+                .init(x: 0, y: 8)
+            ]
+
+            XCTAssertEqual(result.0, CGSpline(kind: .curve, points: firstPoints))
+            XCTAssertEqual(result.1, CGSpline(kind: .curve, points: lastPoints))
+        }
+        else {
+            XCTFail()
+        }
+    }
+
+    func testSplinesSplitFail() {
+        let point = CGSpline(kind: .line, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
+        XCTAssertNil(point.split(at: 0.5))
     }
 
     static var allTests = [
