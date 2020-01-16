@@ -11,9 +11,42 @@ import Foundation
 private let places: Int = 6
 private let maxIters: Int = 500
 
+public struct CGLine: Equatable {
+    private let a: CGFloat
+    private let b: CGFloat
+    private let c: CGFloat
+    let start: CGPoint
+    let end: CGPoint
+    init(start: CGPoint, end: CGPoint) {
+        var a = start.y - end.y
+        var b = end.x - start.x
+        var c = start.x * end.y - end.x * start.y
+        let distance = sqrt(a * a + b * b)
+        if distance != 0 {
+            a /= distance
+            b /= distance
+            c /= distance
+        }
+        else {
+            a = 0
+            b = 0
+            c = 0
+        }
+        self.a = a
+        self.b = b
+        self.c = c
+        self.start = start
+        self.end = end
+    }
+
+    func distance(to point: CGPoint) -> CGFloat {
+        return a * point.x + b * point.y + c
+    }
+}
+
 public struct CGSpline: Equatable {
     enum Kind: Int {
-        case line
+        case segment
         case quad
         case curve
     }
@@ -42,7 +75,7 @@ public struct CGSpline: Equatable {
     init(kind: Kind, points: [CGPoint]) {
         let count: Int
         switch kind {
-        case .line:
+        case .segment:
             count = 2
         case .quad:
             count = 3
@@ -89,6 +122,20 @@ public struct CGSpline: Equatable {
         }
     }
 
+    func fatLine() -> (CGLine, CGFloat, CGFloat) {
+        let line = CGLine(start: points[0], end: points[points.count - 1])
+        var minimum: CGFloat = 0
+        var maximum: CGFloat = 0
+
+        for point in points.dropFirst().dropLast()  {
+            let distance = line.distance(to: point)
+            minimum = min(distance, minimum)
+            maximum = max(distance, maximum)
+        }
+
+        return (line, minimum, maximum)
+    }
+
     func split(at: Double) -> (CGSpline, CGSpline)? {
         precondition(at > 0 && at < 1)
 
@@ -108,8 +155,8 @@ public struct CGSpline: Equatable {
                 t: CGFloat(ratio)
             )
             result = (
-                CGSpline(kind: .line, points: [points[0], p]),
-                CGSpline(kind: .line, points: [p, points[points.count - 1]])
+                CGSpline(kind: .segment, points: [points[0], p]),
+                CGSpline(kind: .segment, points: [p, points[points.count - 1]])
             )
         case .curve:
             var localPoints = self.points
@@ -186,8 +233,8 @@ public struct CGSpline: Equatable {
 
                 if isOnBothSplines {
                     return [
-                        CGSpline(kind: .line, points: [points[0], intersectionPoint]),
-                        CGSpline(kind: .line, points: [intersectionPoint, points[points.count - 1]])
+                        CGSpline(kind: .segment, points: [points[0], intersectionPoint]),
+                        CGSpline(kind: .segment, points: [intersectionPoint, points[points.count - 1]])
                     ]
                 }
                 else {
@@ -232,7 +279,7 @@ public extension CGPath {
                 prev = origin
             case .addLineToPoint:
                 elemPointsCount = 1
-                splineKind = .line
+                splineKind = .segment
             case .addQuadCurveToPoint:
                 elemPointsCount = 2
                 splineKind = .quad
@@ -240,7 +287,7 @@ public extension CGPath {
                 elemPointsCount = 3
                 splineKind = .curve
             case .closeSubpath:
-                let spline = CGSpline(kind: .line, points: [prev, origin])
+                let spline = CGSpline(kind: .segment, points: [prev, origin])
                 result.append(spline)
                 prev = origin
             @unknown default:

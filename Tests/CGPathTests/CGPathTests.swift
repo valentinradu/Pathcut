@@ -16,7 +16,7 @@ final class CGPathTests: XCTestCase {
         try path.addPath(data: "M0,0 M3,2 L1,1 L1,0 C0.5,0.5 0.5,0.5 0,0 Z")
         XCTAssertEqual(
             path.splines.map({$0.kind}),
-            [CGSpline.Kind.line, .line, .curve, .line]
+            [CGSpline.Kind.segment, .segment, .curve, .segment]
         )
         XCTAssertEqual(
             path.splines.map({$0.points.map({[$0.x, $0.y]})}),
@@ -30,10 +30,10 @@ final class CGPathTests: XCTestCase {
     }
 
     func testSplinesCollinearity()  {
-        let line = CGSpline(kind: .line, points: [.init(x: 1, y: 1), .init(x: 5, y: 3)])
+        let line = CGSpline(kind: .segment, points: [.init(x: 1, y: 1), .init(x: 5, y: 3)])
         XCTAssertEqual(line.collinearity, CGSpline.Collinearity(kind: .slope, m: 0.5, b: 0.5))
 
-        let pointLine = CGSpline(kind: .line, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
+        let pointLine = CGSpline(kind: .segment, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
         XCTAssertEqual(pointLine.collinearity, CGSpline.Collinearity(kind: .point))
 
         let pointCurve = CGSpline(kind: .curve, points: [
@@ -44,10 +44,10 @@ final class CGPathTests: XCTestCase {
         ])
         XCTAssertEqual(pointCurve.collinearity, CGSpline.Collinearity(kind: .point))
 
-        let vertical = CGSpline(kind: .line, points: [.init(x: 1, y: 5), .init(x: 1, y: 0)])
+        let vertical = CGSpline(kind: .segment, points: [.init(x: 1, y: 5), .init(x: 1, y: 0)])
         XCTAssertEqual(vertical.collinearity, CGSpline.Collinearity(kind: .vertical))
 
-        let horizontal = CGSpline(kind: .line, points: [.init(x: 5, y: 1), .init(x: 2, y: 1)])
+        let horizontal = CGSpline(kind: .segment, points: [.init(x: 5, y: 1), .init(x: 2, y: 1)])
         XCTAssertEqual(horizontal.collinearity, CGSpline.Collinearity(kind: .horizontal))
 
         let curve = CGSpline(kind: .curve, points: [
@@ -60,23 +60,23 @@ final class CGPathTests: XCTestCase {
     }
 
     func testSplinesSimpleIntersection() {
-        let slope = CGSpline(kind: .line, points: [.init(x: 0, y: 0), .init(x: 6, y: 3)])
-        let vertical = CGSpline(kind: .line, points: [.init(x: 4, y: 0), .init(x: 4, y: 4)])
-        let horizontal = CGSpline(kind: .line, points: [.init(x: 0, y: 2), .init(x: 6, y: 2)])
-        let point = CGSpline(kind: .line, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
+        let slope = CGSpline(kind: .segment, points: [.init(x: 0, y: 0), .init(x: 6, y: 3)])
+        let vertical = CGSpline(kind: .segment, points: [.init(x: 4, y: 0), .init(x: 4, y: 4)])
+        let horizontal = CGSpline(kind: .segment, points: [.init(x: 0, y: 2), .init(x: 6, y: 2)])
+        let point = CGSpline(kind: .segment, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
         let curve = CGSpline(kind: .curve, points: [
             .init(x: 2, y: 4),
             .init(x: 3, y: 3),
             .init(x: 5, y: 1),
             .init(x: 6, y: 0)
         ])
-        let outside = CGSpline(kind: .line, points: [.init(x: 0, y: 2), .init(x: 2, y: 2)])
+        let outside = CGSpline(kind: .segment, points: [.init(x: 0, y: 2), .init(x: 2, y: 2)])
         let intersectionPoint = CGPoint(x: 4, y: 2)
 
         func splitAt(_ spline: CGSpline, _ point: CGPoint) -> [CGSpline] {
             return [
-                CGSpline(kind: .line, points: [spline.points[0], point]),
-                CGSpline(kind: .line, points: [point, spline.points[spline.points.count - 1]])
+                CGSpline(kind: .segment, points: [spline.points[0], point]),
+                CGSpline(kind: .segment, points: [point, spline.points[spline.points.count - 1]])
             ]
         }
 
@@ -119,8 +119,43 @@ final class CGPathTests: XCTestCase {
     }
 
     func testSplinesSplitFail() {
-        let point = CGSpline(kind: .line, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
+        let point = CGSpline(kind: .segment, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
         XCTAssertNil(point.split(at: 0.5))
+    }
+
+    func testSegment() {
+        let segment = CGLine(start: .zero, end: CGPoint(x: 4, y: 4))
+        let outer = CGPoint(x: -3, y: 1)
+        let upper = CGPoint(x: 3, y: 4)
+        let inner = CGPoint(x: 3, y: 1)
+        XCTAssertEqual(segment.distance(to: outer), 2.83, accuracy: 0.01)
+        XCTAssertEqual(segment.distance(to: upper), 0.70, accuracy: 0.01)
+        XCTAssertEqual(segment.distance(to: inner), -1.41, accuracy: 0.01)
+    }
+
+    func testFatline() {
+        let spline = CGSpline(kind: .curve, points: [
+            .init(x: 0, y: 0),
+            .init(x: 4, y: 0),
+            .init(x: 3, y: 4),
+            .init(x: 4, y: 4)
+        ])
+        let (line, minimum, maximum) = spline.fatLine()
+        XCTAssertEqual(line, CGLine(start: .zero, end: .init(x: 4, y: 4)))
+        XCTAssertEqual(maximum, 0.70, accuracy: 0.01)
+        XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
+    }
+
+    func testFatlineConvex() {
+        let spline = CGSpline(kind: .curve, points: [
+            .init(x: 0, y: 0),
+            .init(x: 4, y: 0),
+            .init(x: 4, y: 3),
+            .init(x: 4, y: 4)
+        ])
+        let (_, minimum, maximum) = spline.fatLine()
+        XCTAssertEqual(maximum, 0)
+        XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
     }
 
     static var allTests = [
