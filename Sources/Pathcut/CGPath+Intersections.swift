@@ -12,9 +12,9 @@ private let places: Int = 6
 private let maxIters: Int = 500
 
 public struct CGLine: Equatable {
-    private let a: CGFloat
-    private let b: CGFloat
-    private let c: CGFloat
+    let a: CGFloat
+    let b: CGFloat
+    let c: CGFloat
     let start: CGPoint
     let end: CGPoint
     init(start: CGPoint, end: CGPoint) {
@@ -48,7 +48,7 @@ public struct CGSpline: Equatable {
     enum Kind: Int {
         case segment
         case quad
-        case curve
+        case cubic
     }
 
     struct Collinearity: Equatable {
@@ -79,7 +79,7 @@ public struct CGSpline: Equatable {
             count = 2
         case .quad:
             count = 3
-        case .curve:
+        case .cubic:
             count = 4
         }
         assert(points.count == count)
@@ -185,7 +185,14 @@ public struct CGSpline: Equatable {
             })
         }
 
-        guard crossPoints.count > 0 else { return nil }
+        guard crossPoints.count > 0 else {
+            if hull.allSatisfy({ $0.y < maximum && $0.y > minimum}) {
+                return self
+            }
+            else {
+                return nil
+            }
+        }
 
         for point in crossPoints {
             minX = min(point.x, minX)
@@ -270,6 +277,10 @@ public struct CGSpline: Equatable {
             return []
         }
 
+        if self == spline {
+            return []
+        }
+
         let group = [self, spline].sorted(by: {$0.collinearity.kind.rawValue < $1.collinearity.kind.rawValue})
 
         if (group[0].collinearity.kind == .point)
@@ -329,22 +340,65 @@ public struct CGSpline: Equatable {
                 }
             }
             else {
+                if (group[0].collinearity.kind == .horizontal || group[0].collinearity.kind == .vertical && group[1].collinearity.kind == .curve) {
+                    let roots: [Double]
+                    let l = CGLine(start: group[0].points[0], end: group[0].points[1])
+                    let p = group[1].points
+                    switch  group[1].kind {
+                    case .quad:
+                        let ap0 = l.a * p[0].x + l.b * p[0].y + l.c
+                        let ap1 = l.a * p[1].x + l.b * p[1].y + l.c
+                        let ap2 = l.a * p[2].x + l.b * p[2].y + l.c
 
-//                else if (group[0].collinearity.kind == .horizontal && group[1].collinearity.kind == .curve) {
-//                    intersectionPoint = .zero //TODO
-//                }
-//                else if (group[0].collinearity.kind == .vertical && group[1].collinearity.kind == .curve) {
-//                    intersectionPoint = .zero //TODO
-//                }
-                func hasConverged(range: Range<Double>) -> Bool {
-                    let factor = pow(10.0, Double(places))
-                    return Int(range.lowerBound * factor) == Int(range.upperBound * factor)
+                        let a = Double(ap0 - 2 * ap1 + ap2)
+                        let b = Double(-2 * ap0 + 2 * ap1)
+                        let c = Double(ap0)
+
+                        roots = quadraticSolve(a: a, b: b, c: c)
+                    case .cubic:
+                        return []
+                    case .segment:
+                        assertionFailure()
+                        return []
+                    }
+
+                    var progress: Double = 0
+                    var result: [CGSpline] = []
+                    var target = group[1]
+
+                    for (i, root) in roots.sorted().enumerated() {
+                        guard root >= 0 && root <= 1 else { continue }
+
+                        let ratio = (root - progress) / (1.0 - progress)
+                        guard let (firstSpline, lastSpline) = target.split(at: CGFloat(ratio)) else { assertionFailure();return [] }
+
+                        if i == roots.count - 1 {
+                            result.append(contentsOf: [firstSpline, lastSpline])
+                        }
+                        else {
+                            result.append(firstSpline)
+                        }
+                        progress += root
+                        target = lastSpline
+                    }
+
+                    return result
                 }
+                else if group[0].collinearity.kind == .curve {
+                    func hasConverged(range: Range<Double>) -> Bool {
+                        let factor = pow(10.0, Double(places))
+                        return Int(range.lowerBound * factor) == Int(range.upperBound * factor)
+                    }
 
-                while hasConverged(range: 0..<1) {
+                    while hasConverged(range: 0..<1) {
 
+                    }
+                    return []
                 }
-                return []
+                else {
+                    assertionFailure()
+                    return []
+                }
             }
         }
     }
@@ -372,7 +426,7 @@ public extension CGPath {
                 splineKind = .quad
             case .addCurveToPoint:
                 elemPointsCount = 3
-                splineKind = .curve
+                splineKind = .cubic
             case .closeSubpath:
                 let spline = CGSpline(kind: .segment, points: [prev, origin])
                 result.append(spline)
