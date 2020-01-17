@@ -30,8 +30,8 @@ final class CGPathTests: XCTestCase {
     }
 
     func testSplinesCollinearity()  {
-        let line = CGSpline(kind: .segment, points: [.init(x: 1, y: 1), .init(x: 5, y: 3)])
-        XCTAssertEqual(line.collinearity, CGSpline.Collinearity(kind: .slope, m: 0.5, b: 0.5))
+        let segment = CGSpline(kind: .segment, points: [.init(x: 1, y: 1), .init(x: 5, y: 3)])
+        XCTAssertEqual(segment.collinearity, CGSpline.Collinearity(kind: .slope, m: 0.5, b: 0.5))
 
         let pointLine = CGSpline(kind: .segment, points: [.init(x: 0, y: 0), .init(x: 0, y: 0)])
         XCTAssertEqual(pointLine.collinearity, CGSpline.Collinearity(kind: .point))
@@ -140,10 +140,14 @@ final class CGPathTests: XCTestCase {
             .init(x: 3, y: 4),
             .init(x: 4, y: 4)
         ])
-        let (line, minimum, maximum) = spline.fatLine()
-        XCTAssertEqual(line, CGLine(start: .zero, end: .init(x: 4, y: 4)))
-        XCTAssertEqual(maximum, 0.70, accuracy: 0.01)
-        XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
+        if let (line, minimum, maximum) = spline.fatLine() {
+            XCTAssertEqual(line, CGLine(start: .zero, end: .init(x: 4, y: 4)))
+            XCTAssertEqual(maximum, 0.70, accuracy: 0.01)
+            XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
+        }
+        else {
+            XCTFail()
+        }
     }
 
     func testFatlineConvex() {
@@ -153,9 +157,34 @@ final class CGPathTests: XCTestCase {
             .init(x: 4, y: 3),
             .init(x: 4, y: 4)
         ])
-        let (_, minimum, maximum) = spline.fatLine()
-        XCTAssertEqual(maximum, 0)
-        XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
+        if let (_, minimum, maximum) = spline.fatLine() {
+            XCTAssertEqual(maximum, 0)
+            XCTAssertEqual(minimum, -2.82, accuracy: 0.01)
+        }
+        else {
+            XCTFail()
+        }
+    }
+
+    func testClip() {
+        let spline = CGSpline(kind: .curve, points: [
+            .init(x: 0, y: 0),
+            .init(x: 3.75, y: 0),
+            .init(x: 1, y: 4),
+            .init(x: 4, y: 4)
+        ])
+        let line = CGLine(start: .init(x: 0, y: 2), end: .init(x: 4, y: 2))
+        if let result = spline.clip(around: line, minimum: -1, maximum: 1.5) {
+            let startPoint = result.points[0]
+            let endPoint = result.points[result.points.count - 1]
+            XCTAssertEqual(startPoint.x, 2, accuracy: 0.01)
+            XCTAssertEqual(startPoint.y, 1, accuracy: 0.01)
+            XCTAssertEqual(endPoint.x, 2.7, accuracy: 0.01)
+            XCTAssertEqual(endPoint.y, 3.5, accuracy: 0.01)
+        }
+        else {
+            XCTFail()
+        }
     }
 
     static var allTests = [

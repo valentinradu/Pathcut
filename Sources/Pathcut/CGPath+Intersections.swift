@@ -107,9 +107,9 @@ public struct CGSpline: Equatable {
             if points[0].x != points[points.count - 1].x {
                 let m = Double((points[0].y - points[points.count - 1].y)/(points[0].x - points[points.count - 1].x))
                 let b = Double(points[0].y) - m * Double(points[0].x)
-                let factor = pow(10.0, Double(places))
+                let tolerance = pow(10.0, -CGFloat(places))
                 for point in points {
-                    if Int(Double(point.y) * factor) != Int((m * Double(point.x) + b) * factor) {
+                    if !point.y.isAlmostEqual(to: CGFloat(m * Double(point.x) + b), tolerance: tolerance) {
                         self.collinearity = Collinearity(kind: .curve)
                         return
                     }
@@ -122,7 +122,10 @@ public struct CGSpline: Equatable {
         }
     }
 
-    func fatLine() -> (CGLine, CGFloat, CGFloat) {
+    func fatLine() -> (CGLine, CGFloat, CGFloat)? {
+        if points.count < 2 {
+            return nil
+        }
         let line = CGLine(start: points[0], end: points[points.count - 1])
         var minimum: CGFloat = 0
         var maximum: CGFloat = 0
@@ -136,10 +139,94 @@ public struct CGSpline: Equatable {
         return (line, minimum, maximum)
     }
 
-    func split(at: Double) -> (CGSpline, CGSpline)? {
-        precondition(at > 0 && at < 1)
+    func clip(around line: CGLine, minimum: CGFloat, maximum: CGFloat) -> CGSpline? {
+        if points.count < 3 || line.start == line.end {
+            return nil
+        }
 
-        let ratio = CGFloat(at)
+        let totalLength = zip(points, points.dropFirst()).reduce(0, {$0 + $1.0.distanceTo($1.1)})
+        var length: CGFloat = 0
+        var distances: [CGPoint] = []
+        for i in 0..<points.count {
+            if i != 0 {
+                length += points[i - 1].distanceTo(points[i])
+            }
+            distances.append(CGPoint(x: length/totalLength, y: line.distance(to: points[i])))
+
+        }
+        // Monotone chain to determine the convex hull of the
+        // points formed by distributing the point-line distances
+        // in a 0..1 ranged based on point index
+        // (e.g. for 3 points will be 0, 0.5, 1)
+        let hull = convexHull(of: distances)
+        let hullSplines = zip(hull, hull.rotating(positions: 1)).map { a, b in
+            return CGSpline(kind: .segment, points: [a, b])
+        }
+        let minSpline = CGSpline(kind: .segment, points: [
+            .init(x: 0, y: minimum),
+            .init(x: 1, y: minimum)
+        ])
+        let maxSpline = CGSpline(kind: .segment, points: [
+            .init(x: 0, y: maximum),
+            .init(x: 1, y: maximum)
+        ])
+
+        var minX: CGFloat = 1
+        var maxX: CGFloat = 0
+        let crossPoints = hullSplines.flatMap { spline in
+            return [minSpline, maxSpline].reduce([CGPoint](), { a, r in
+                guard spline.collinearity.kind != .horizontal else {return a}
+                if let point = spline.intersections(with: r).first?.points[safe: 1] {
+                    return a + [point]
+                }
+                else {
+                    return a
+                }
+            })
+        }
+
+        guard crossPoints.count > 0 else { return nil }
+
+        for point in crossPoints {
+            minX = min(point.x, minX)
+            maxX = max(point.x, maxX)
+        }
+
+
+        if minX > 0 {
+            if maxX < 1 {
+                if let (_, result, _) = split(at: minX, and: maxX) {
+                    return result
+                }
+            }
+            else {
+                if let (_, result) = split(at: minX) {
+                    return result
+                }
+            }
+        }
+        else {
+            if maxX < 1 {
+                if let (result, _) = split(at: maxX) {
+                    return result
+                }
+            }
+        }
+        return nil
+    }
+
+    func split(at ratio1: CGFloat, and ratio2: CGFloat) -> (CGSpline, CGSpline, CGSpline)? {
+        guard ratio1 < ratio2 else {assertionFailure();return nil}
+        if let r1 = split(at: ratio1) {
+            if let r2 = r1.1.split(at: (ratio2 - ratio1) / (1.0 - ratio1)) {
+                return (r1.0, r2.0, r2.1)
+            }
+        }
+        return nil
+    }
+    func split(at ratio: CGFloat) -> (CGSpline, CGSpline)? {
+        guard ratio > 0 && ratio < 1 else {assertionFailure();return nil}
+
         var result: (CGSpline, CGSpline)?
         switch collinearity.kind {
         case .point:
