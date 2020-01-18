@@ -154,14 +154,8 @@ public struct CGSpline: Equatable {
             distances.append(CGPoint(x: length/totalLength, y: line.distance(to: points[i])))
 
         }
-        // Monotone chain to determine the convex hull of the
-        // points formed by distributing the point-line distances
-        // in a 0..1 ranged based on point index
-        // (e.g. for 3 points will be 0, 0.5, 1)
-        let hull = convexHull(of: distances)
-        let hullSplines = zip(hull, hull.rotating(positions: 1)).map { a, b in
-            return CGSpline(kind: .segment, points: [a, b])
-        }
+
+        let distanceSpline = CGSpline(kind: kind, points: distances)
         let minSpline = CGSpline(kind: .segment, points: [
             .init(x: 0, y: minimum),
             .init(x: 1, y: minimum)
@@ -171,29 +165,13 @@ public struct CGSpline: Equatable {
             .init(x: 1, y: maximum)
         ])
 
+        let crossPoints = distanceSpline.intersections(with: minSpline).map({$0.points[0]}).dropFirst()
+                        + distanceSpline.intersections(with: maxSpline).map({$0.points[0]}).dropFirst()
+
+        guard crossPoints.count > 0 else { return nil }
+
         var minX: CGFloat = 1
         var maxX: CGFloat = 0
-        let crossPoints = hullSplines.flatMap { spline in
-            return [minSpline, maxSpline].reduce([CGPoint](), { a, r in
-                guard spline.collinearity.kind != .horizontal else {return a}
-                if let point = spline.intersections(with: r).first?.points[safe: 1] {
-                    return a + [point]
-                }
-                else {
-                    return a
-                }
-            })
-        }
-
-        guard crossPoints.count > 0 else {
-            if hull.allSatisfy({ $0.y < maximum && $0.y > minimum}) {
-                return self
-            }
-            else {
-                return nil
-            }
-        }
-
         for point in crossPoints {
             minX = min(point.x, minX)
             maxX = max(point.x, maxX)
@@ -344,19 +322,25 @@ public struct CGSpline: Equatable {
                     let roots: [Double]
                     let l = CGLine(start: group[0].points[0], end: group[0].points[1])
                     let p = group[1].points
+                    let ap0 = Double(l.a * p[0].x + l.b * p[0].y + l.c)
+                    let ap1 = Double(l.a * p[1].x + l.b * p[1].y + l.c)
+                    let ap2 = Double(l.a * p[2].x + l.b * p[2].y + l.c)
+
                     switch  group[1].kind {
                     case .quad:
-                        let ap0 = l.a * p[0].x + l.b * p[0].y + l.c
-                        let ap1 = l.a * p[1].x + l.b * p[1].y + l.c
-                        let ap2 = l.a * p[2].x + l.b * p[2].y + l.c
-
-                        let a = Double(ap0 - 2 * ap1 + ap2)
-                        let b = Double(-2 * ap0 + 2 * ap1)
-                        let c = Double(ap0)
+                        let a = ap0 - 2.0 * ap1 + ap2
+                        let b = -2.0 * ap0 + 2.0 * ap1
+                        let c = ap0
 
                         roots = quadraticSolve(a: a, b: b, c: c)
                     case .cubic:
-                        return []
+                        let ap3 = Double(l.a * p[3].x + l.b * p[3].y + l.c)
+                        let a = -ap0 + 3.0*ap1 - 3.0*ap2 + ap3
+                        let b = 3.0*ap0 - 6.0*ap1 + 3.0*ap2
+                        let c = -3.0*ap0 + 3.0*ap1
+                        let d = ap0
+
+                        roots = cubicSolve(a: a, b: b, c: c, d: d)
                     case .segment:
                         assertionFailure()
                         return []
@@ -365,14 +349,14 @@ public struct CGSpline: Equatable {
                     var progress: Double = 0
                     var result: [CGSpline] = []
                     var target = group[1]
+                    var validRoots = roots.filter({$0 >= 0 && $0 <= 1})
 
-                    for (i, root) in roots.sorted().enumerated() {
-                        guard root >= 0 && root <= 1 else { continue }
+                    for (i, root) in validRoots.sorted().enumerated() {
 
                         let ratio = (root - progress) / (1.0 - progress)
                         guard let (firstSpline, lastSpline) = target.split(at: CGFloat(ratio)) else { assertionFailure();return [] }
 
-                        if i == roots.count - 1 {
+                        if i == validRoots.count - 1 {
                             result.append(contentsOf: [firstSpline, lastSpline])
                         }
                         else {

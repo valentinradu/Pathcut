@@ -216,7 +216,7 @@ final class CGPathTests: XCTestCase {
         }
     }
 
-    func testLineCurveIntersection() {
+    func testLineQuadraticIntersection() {
         let spline = CGSpline(kind: .quad, points: [
             .init(x: 0, y: 0),
             .init(x: 2, y: 1),
@@ -237,6 +237,33 @@ final class CGPathTests: XCTestCase {
         else {
             XCTFail()
         }
+    }
+
+    func testLineCubicIntersection() {
+        let spline = CGSpline(kind: .cubic, points: [
+            .init(x: 6, y: 0),
+            .init(x: 12, y: 0),
+            .init(x: 0, y: 8),
+            .init(x: 8, y: 8)
+        ])
+        let line = CGSpline(kind: .segment, points: [
+            .init(x: 7, y: 0),
+            .init(x: 7, y: 8)
+        ])
+        let result = line.intersections(with: spline).map({$0.points})
+        XCTAssertEqual(result.count, 4)
+        let firstPoint = result[1][0]
+        let secondPoint = result[2][0]
+        let thirdPoint = result[3][0]
+
+        XCTAssertEqual(firstPoint.x, 7, accuracy: 0.01)
+        XCTAssertEqual(firstPoint.y, 0.1, accuracy: 0.01)
+
+        XCTAssertEqual(secondPoint.x, 7, accuracy: 0.01)
+        XCTAssertEqual(secondPoint.y, 2.8, accuracy: 0.01)
+
+        XCTAssertEqual(thirdPoint.x, 7, accuracy: 0.01)
+        XCTAssertEqual(thirdPoint.y, 7.95, accuracy: 0.01)
     }
 
     func testIntersection() {
