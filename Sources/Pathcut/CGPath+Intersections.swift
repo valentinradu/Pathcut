@@ -168,7 +168,15 @@ public struct CGSpline: Equatable {
         let crossPoints = distanceSpline.intersections(with: minSpline).map({$0.points[0]}).dropFirst()
                         + distanceSpline.intersections(with: maxSpline).map({$0.points[0]}).dropFirst()
 
-        guard crossPoints.count > 0 else { return nil }
+        guard crossPoints.count > 0 else {
+            let hull = convexHull(of: distances)
+            if hull.allSatisfy({ $0.y < maximum && $0.y > minimum}) {
+                return self
+            }
+            else {
+                return nil
+            }
+        }
 
         var minX: CGFloat = 1
         var maxX: CGFloat = 0
@@ -353,7 +361,7 @@ public struct CGSpline: Equatable {
 
                     for (i, root) in validRoots.sorted().enumerated() {
 
-                        let ratio = (root - progress) / (1.0 - progress)
+                        let ratio = root * (1.0 - progress)
                         guard let (firstSpline, lastSpline) = target.split(at: CGFloat(ratio)) else { assertionFailure();return [] }
 
                         if i == validRoots.count - 1 {
