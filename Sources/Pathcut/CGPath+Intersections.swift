@@ -139,7 +139,7 @@ public struct CGSpline: Equatable {
         return (line, minimum, maximum)
     }
 
-    func clip(around line: CGLine, minimum: CGFloat, maximum: CGFloat) -> CGSpline? {
+    func clip(around line: CGLine, minimum: CGFloat, maximum: CGFloat) -> (CGSpline, CGFloat, CGFloat)? {
         if points.count < 3 || line.start == line.end {
             return nil
         }
@@ -171,7 +171,7 @@ public struct CGSpline: Equatable {
         guard crossPoints.count > 0 else {
             let hull = convexHull(of: distances)
             if hull.allSatisfy({ $0.y < maximum && $0.y > minimum}) {
-                return self
+                return (self, 0, 1)
             }
             else {
                 return nil
@@ -188,24 +188,23 @@ public struct CGSpline: Equatable {
 
         if minX > 0 {
             if maxX < 1 {
-                if let (_, result, _) = split(at: minX, and: maxX) {
-                    return result
-                }
+                guard let (_, result, _) = split(at: minX, and: maxX) else {assertionFailure();return nil}
+                return (result, minX, maxX)
             }
             else {
-                if let (_, result) = split(at: minX) {
-                    return result
-                }
+                guard let (_, result) = split(at: minX) else {assertionFailure();return nil}
+                return (result, minX, 1)
             }
         }
         else {
             if maxX < 1 {
-                if let (result, _) = split(at: maxX) {
-                    return result
-                }
+                guard let (result, _) = split(at: maxX) else {assertionFailure();return nil}
+                return (result, 0, maxX)
+            }
+            else {
+                return nil
             }
         }
-        return nil
     }
 
     func split(at ratio1: CGFloat, and ratio2: CGFloat) -> (CGSpline, CGSpline, CGSpline)? {
@@ -291,9 +290,9 @@ public struct CGSpline: Equatable {
                 let y = x * c.m + c.b
                 intersectionPoint = CGPoint(x: x, y: y)
             }
-            else if (collinearity.kind == .slope || spline.collinearity.kind == .slope) {
-                let c = collinearity
-                let oc = spline.collinearity
+            else if (group[0].collinearity.kind == .slope || group[1].collinearity.kind == .slope) {
+                let c = group[0].collinearity
+                let oc = group[1].collinearity
                 if c.m != oc.m || c.b != oc.b {
                     let x = (oc.b - c.b)/(c.m - oc.m)
                     let y = x * c.m + c.b
@@ -354,38 +353,37 @@ public struct CGSpline: Equatable {
                         return []
                     }
 
-                    var progress: Double = 0
                     var result: [CGSpline] = []
-                    var target = group[1]
-                    var validRoots = roots.filter({$0 >= 0 && $0 <= 1})
+                    let validRoots = roots.filter({$0 >= 0 && $0 <= 1}).sorted()
 
-                    for (i, root) in validRoots.sorted().enumerated() {
+                    for i in 0..<validRoots.count {
+                        guard let (a, c) = group[1].split(at: CGFloat(validRoots[i])) else { assertionFailure();return [] }
 
-                        let ratio = root * (1.0 - progress)
-                        guard let (firstSpline, lastSpline) = target.split(at: CGFloat(ratio)) else { assertionFailure();return [] }
-
+                        if i == 0 {
+                            result.append(a)
+                        }
                         if i == validRoots.count - 1 {
-                            result.append(contentsOf: [firstSpline, lastSpline])
+                            result.append(c)
                         }
-                        else {
-                            result.append(firstSpline)
+                        if i < validRoots.count - 1 {
+                            guard let (_, b, _) = group[1].split(at: CGFloat(validRoots[i]), and: CGFloat(validRoots[i+1])) else { assertionFailure();return [] }
+                            result.append(b)
                         }
-                        progress += root
-                        target = lastSpline
                     }
 
-                    return result
+                    // if we are the line
+                    if collinearity.kind == .horizontal || collinearity.kind == .vertical {
+                        let crossings = [points[0]] + result.map({$0.points[0]}).dropFirst() + [points[1]]
+                        return zip(crossings, crossings.dropFirst()).map({a, b in
+                            CGSpline(kind: .segment, points: [a, b])
+                        })
+                    }
+                    else {
+                        return result
+                    }
                 }
                 else if group[0].collinearity.kind == .curve {
-                    func hasConverged(range: Range<Double>) -> Bool {
-                        let factor = pow(10.0, Double(places))
-                        return Int(range.lowerBound * factor) == Int(range.upperBound * factor)
-                    }
-
-                    while hasConverged(range: 0..<1) {
-
-                    }
-                    return []
+                    return recursiveIntersections(with: spline, count: 0)
                 }
                 else {
                     assertionFailure()
@@ -393,6 +391,19 @@ public struct CGSpline: Equatable {
                 }
             }
         }
+    }
+
+    private func recursiveIntersections(with spline: CGSpline, count: Int) -> [CGSpline] {
+        let length = zip(points, points.dropFirst()).reduce(0, {$0 + $1.0.distanceTo($1.1)})
+        if length <= pow(10.0, CGFloat(-places)) {
+            return [self]
+        }
+        if count > 100 {
+            return []
+        }
+        guard let (line, minimum, maximum) = spline.fatLine() else {return []}
+        guard let (result, _, _) = clip(around: line, minimum: minimum, maximum: maximum) else {return  []}
+        return [] + spline.recursiveIntersections(with: result, count: count + 1)
     }
 }
 

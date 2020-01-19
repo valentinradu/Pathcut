@@ -174,13 +174,13 @@ final class CGPathTests: XCTestCase {
             .init(x: 4, y: 4)
         ])
         let line = CGLine(start: .init(x: 0, y: 2), end: .init(x: 4, y: 2))
-        if let result = spline.clip(around: line, minimum: -1, maximum: 1.5) {
+        if let (result, _, _) = spline.clip(around: line, minimum: -1, maximum: 1.5) {
         let startPoint = result.points[0]
         let endPoint = result.points[result.points.count - 1]
-        XCTAssertEqual(startPoint.x, 2, accuracy: 0.01)
-        XCTAssertEqual(startPoint.y, 1, accuracy: 0.01)
-        XCTAssertEqual(endPoint.x, 2.7, accuracy: 0.01)
-        XCTAssertEqual(endPoint.y, 3.5, accuracy: 0.01)
+        XCTAssertEqual(startPoint.x, 2.04, accuracy: 0.01)
+        XCTAssertEqual(startPoint.y, 1.06, accuracy: 0.01)
+        XCTAssertEqual(endPoint.x, 2.82, accuracy: 0.01)
+        XCTAssertEqual(endPoint.y, 3.61, accuracy: 0.01)
         }
         else {
             XCTFail()
@@ -208,7 +208,7 @@ final class CGPathTests: XCTestCase {
                     .init(x: 4, y: 4)
                 ])
         let line = CGLine(start: .init(x: 0, y: 2), end: .init(x: 4, y: 2))
-        if let result = spline.clip(around: line, minimum: -10, maximum: 10) {
+        if let (result, _, _) = spline.clip(around: line, minimum: -10, maximum: 10) {
             XCTAssertEqual(spline, result)
         }
         else {
@@ -226,9 +226,11 @@ final class CGPathTests: XCTestCase {
             .init(x: 0.5, y: 0),
             .init(x: 0.5, y: 3)
         ])
-        let result = line.intersections(with: spline).map({$0.points})
-        XCTAssertEqual(result.count, 3)
-        if let middleFirstPoint = result[1].first, let middleLastPoint = result[1].last {
+        let result = line.intersections(with: spline)
+        let resultPoints = result.map({$0.points})
+        XCTAssertTrue(result.allSatisfy({$0.kind == .segment}))
+        XCTAssertEqual(resultPoints.count, 3)
+        if let middleFirstPoint = resultPoints[1].first, let middleLastPoint = resultPoints[1].last {
             XCTAssertEqual(middleFirstPoint.x, 0.5, accuracy: 0.01)
             XCTAssertEqual(middleFirstPoint.y, 0.29, accuracy: 0.01)
             XCTAssertEqual(middleLastPoint.x, 0.5, accuracy: 0.01)
@@ -250,11 +252,13 @@ final class CGPathTests: XCTestCase {
             .init(x: 7, y: 0),
             .init(x: 7, y: 8)
         ])
-        let result = line.intersections(with: spline).map({$0.points})
-        XCTAssertEqual(result.count, 4)
-        let firstPoint = result[1][0]
-        let secondPoint = result[2][0]
-        let thirdPoint = result[3][0]
+        let result = line.intersections(with: spline)
+        XCTAssertTrue(result.allSatisfy({$0.kind == .segment}))
+        let resultPoints = result.map({$0.points})
+        XCTAssertEqual(resultPoints.count, 4)
+        let firstPoint = resultPoints[1][0]
+        let secondPoint = resultPoints[2][0]
+        let thirdPoint = resultPoints[3][0]
 
         XCTAssertEqual(firstPoint.x, 7, accuracy: 0.01)
         XCTAssertEqual(firstPoint.y, 0.1, accuracy: 0.01)
