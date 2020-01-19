@@ -39,23 +39,38 @@ func quadraticSolve(a: Double, b: Double, c: Double) -> [Double] {
 func cubicSolve(a: Double, b: Double, c: Double, d: Double) -> [Double] {
     if a == 0 { return quadraticSolve(a: b, b: c, c: d) }
 
-    let a1 = b/a
-    let a2 = c/a
-    let a3 = d/a
+    let p = b/a
+    let q = c/a
+    let r = d/a
+    let u = q - pow(p, 2)/3
+    let v = r - p*q/3 + 2*pow(p, 3)/27
 
-    let q = (3*a2 - pow(a1, 2))/9
-    let r = (9*a1*a2 - 27*a3 - 2*pow(a1, 3)) / 54
+    let M = Double.greatestFiniteMagnitude
+    if abs(p) > 27 * pow(M, 1/3) {
+        return [-p]
+    }
+    else if abs(v) > pow(M, 1/2) {
+        return [pow(v, 1/3)]
+    }
+    else if abs(u) > 3 * pow(M, 1/3) {
+        return [pow(4, 1/3) * u / 3]
+    }
 
-    let d = pow(q, 3) + pow(r, 2)
+    let j = 4*pow(u/3, 3) + pow(v, 2)
 
-    if d <= 0 {
-        let theta = acos(r/sqrt(-pow(q, 3)))
-        let x1 = 2*sqrt(-q)*cos((1/3)*theta) - (1/3)*a1
-        let x2 = 2*sqrt(-q)*cos((1/3)*theta + 2*Double.pi/3) - (1/3)*a1
-        let x3 = 2*sqrt(-q)*cos((1/3)*theta + 4*Double.pi/3) - (1/3)*a1
-        return [x1, x2, x3]
+    if j >= 0 {
+        let w = pow(j, 1/2)
+        let y = (u/3) * pow(2/(w + v), 1/3) - pow((w + v)/2, 1/3) - p/3
+        return [y]
     }
     else {
-        return []
+        let s = pow((-u/3), 1/2)
+        let t = -v/(2 * pow(s, 3))
+        let k = acos(t)/3
+
+        let y1 = 2 * s * cos(k) - p/3
+        let y2 = s * (-cos(k) + pow(3, 1/2) * sin(k)) - p/3
+        let y3 = s * (-cos(k) - pow(3, 1/2) * sin(k)) - p/3
+        return [y1, y2, y3]
     }
 }

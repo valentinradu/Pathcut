@@ -165,8 +165,9 @@ public struct CGSpline: Equatable {
             .init(x: 1, y: maximum)
         ])
 
-        let crossPoints = distanceSpline.intersections(with: minSpline).map({$0.points[0]}).dropFirst()
-                        + distanceSpline.intersections(with: maxSpline).map({$0.points[0]}).dropFirst()
+        let crossPointsMin = distanceSpline.intersections(with: minSpline).map({$0.points[0]}).dropFirst()
+        let crossPointsMax = distanceSpline.intersections(with: maxSpline).map({$0.points[0]}).dropFirst()
+        let crossPoints = crossPointsMin + crossPointsMax
 
         guard crossPoints.count > 0 else {
             let hull = convexHull(of: distances)
