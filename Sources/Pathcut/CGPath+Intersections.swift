@@ -207,7 +207,28 @@ public struct CGSpline: Equatable {
             }
         }
     }
+    func split(at ratios: [CGFloat]) -> [CGSpline] {
+        if ratios.count == 0 {
+            return []
+        }
+        if ratios.count == 1 {
+            guard let (head, tail) = split(at: ratios[0]) else {return []}
+            return [head, tail]
+        }
 
+        var spline = self
+        var result = [CGSpline]()
+        var prevRatio = ratios[0]
+        for ratio in ratios {
+            assert(prevRatio < ratio)
+            if let (head, tail) = spline.split(at: (ratio - prevRatio) / (1.0 - prevRatio)) {
+                result.append(head)
+                spline = tail
+            }
+            prevRatio = ratio
+        }
+        return result
+    }
     func split(at ratio1: CGFloat, and ratio2: CGFloat) -> (CGSpline, CGSpline, CGSpline)? {
         guard ratio1 < ratio2 else {assertionFailure();return nil}
         if let r1 = split(at: ratio1) {
@@ -384,7 +405,8 @@ public struct CGSpline: Equatable {
                     }
                 }
                 else if group[0].collinearity.kind == .curve {
-                    return recursiveIntersections(with: spline, count: 0)
+                    let points = crossings(with: spline)
+                    return group[0].split(at: points)
                 }
                 else {
                     assertionFailure()
@@ -394,17 +416,25 @@ public struct CGSpline: Equatable {
         }
     }
 
-    private func recursiveIntersections(with spline: CGSpline, count: Int) -> [CGSpline] {
+    private func crossings(with spline: CGSpline, count: Int = 0) -> [CGFloat] {
         let length = zip(points, points.dropFirst()).reduce(0, {$0 + $1.0.distanceTo($1.1)})
         if length <= pow(10.0, CGFloat(-places)) {
-            return [self]
+            return [0]
         }
         if count > 100 {
-            return []
+            return [0]
         }
-        guard let (line, minimum, maximum) = spline.fatLine() else {return []}
-        guard let (result, _, _) = clip(around: line, minimum: minimum, maximum: maximum) else {return  []}
-        return [] + spline.recursiveIntersections(with: result, count: count + 1)
+        guard let (line, minimum, maximum) = spline.fatLine() else {
+            return [0]
+        }
+        guard let (section, minX, maxX) = clip(around: line, minimum: minimum, maximum: maximum) else {
+            return [0]
+        }
+        let result = spline.crossings(with: section, count: count + 1)
+        let ratio = maxX - minX
+        return result.map { r in
+            return minX + r * ratio
+        }
     }
 }
 
