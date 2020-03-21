@@ -293,6 +293,28 @@ final class CGPathTests: XCTestCase {
         }
     }
 
+    func testWrapper() {
+        let rect = CGRect(x: 0, y: 0, width: 50, height: 50)
+        let path = CGPath(rect: rect, transform: nil)
+        let other = CGMutablePath()
+        other.move(to: .init(x: 25, y: 0))
+        other.addLine(to: .init(x: 25, y: 50))
+        let result = path.intersect(with: other)
+        let points = Set(result
+            .map({$0.splines})
+            .reduce([], {$0 + $1})
+            .map({$0.points})
+            .reduce([], {$0 + $1}))
+        XCTAssertEqual(points, Set([
+            .init(x: 0, y: 0),
+            .init(x: 25, y: 0),
+            .init(x: 50, y: 0),
+            .init(x: 50, y: 50),
+            .init(x: 25, y: 50),
+            .init(x: 0, y: 50)
+        ]))
+    }
+
     static var allTests = [
         ("testDataPath", testDataPath),
         ("testSplinesCreate", testSplinesCreate),

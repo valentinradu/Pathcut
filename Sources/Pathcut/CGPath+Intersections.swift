@@ -505,7 +505,7 @@ public extension CGPath {
     }
 
     func intersect(with path: CGPath) -> [CGPath] {
-        var result = [CGMutablePath]()
+        var result = [CGMutablePath()]
         for spline in splines {
             var hasIntersections = false
             for otherSpline in path.splines {

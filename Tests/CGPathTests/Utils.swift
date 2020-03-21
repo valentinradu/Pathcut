@@ -34,6 +34,13 @@ public extension Bundle {
     }
 }
 
+extension CGPoint: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(x)
+        hasher.combine(y)
+    }
+}
+
 public extension CALayer {
     var bitmapRep: NSBitmapImageRep {
         guard let imageRep = NSBitmapImageRep(bitmapDataPlanes: nil,
