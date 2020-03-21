@@ -285,7 +285,8 @@ final class CGPathTests: XCTestCase {
         ])
 
         if let result = spline1.intersections(with: spline2).first?.points.last {
-            XCTAssertEqual(result, CGPoint(x: 2, y: 2))
+            XCTAssertEqual(result.x, 2, accuracy: 0.2)
+            XCTAssertEqual(result.y, 2, accuracy: 0.2)
         }
         else {
             XCTFail()

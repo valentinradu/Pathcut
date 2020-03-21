@@ -189,7 +189,7 @@ public struct CGSpline: Equatable {
 
         if minX > 0 {
             if maxX < 1 {
-                guard let (_, result, _) = split(at: minX, and: maxX) else {assertionFailure();return nil}
+                guard let result = split(at: [minX, maxX])[safe: 1] else {assertionFailure();return nil}
                 return (result, minX, maxX)
             }
             else {
@@ -207,7 +207,7 @@ public struct CGSpline: Equatable {
             }
         }
     }
-    func split(at ratios: [CGFloat]) -> [CGSpline] {
+    public func split(at ratios: [CGFloat]) -> [CGSpline] {
         if ratios.count == 0 {
             return []
         }
@@ -218,27 +218,30 @@ public struct CGSpline: Equatable {
 
         var spline = self
         var result = [CGSpline]()
-        var prevRatio = ratios[0]
+        var prevRatio: CGFloat? = nil
         for ratio in ratios {
-            assert(prevRatio < ratio)
-            if let (head, tail) = spline.split(at: (ratio - prevRatio) / (1.0 - prevRatio)) {
-                result.append(head)
-                spline = tail
+            if let prevRatio = prevRatio {
+                assert(prevRatio <= ratio)
+
+                if prevRatio < ratio {
+                    if let (head, tail) = spline.split(at: (ratio - prevRatio) / (1.0 - prevRatio)) {
+                        result.append(head)
+                        spline = tail
+                    }
+                }
+            }
+            else {
+                if let (head, tail) = spline.split(at: ratio) {
+                    result.append(head)
+                    spline = tail
+                }
             }
             prevRatio = ratio
         }
+        result.append(spline)
         return result
     }
-    func split(at ratio1: CGFloat, and ratio2: CGFloat) -> (CGSpline, CGSpline, CGSpline)? {
-        guard ratio1 < ratio2 else {assertionFailure();return nil}
-        if let r1 = split(at: ratio1) {
-            if let r2 = r1.1.split(at: (ratio2 - ratio1) / (1.0 - ratio1)) {
-                return (r1.0, r2.0, r2.1)
-            }
-        }
-        return nil
-    }
-    func split(at ratio: CGFloat) -> (CGSpline, CGSpline)? {
+    public func split(at ratio: CGFloat) -> (CGSpline, CGSpline)? {
         guard ratio > 0 && ratio < 1 else {assertionFailure();return nil}
 
         var result: (CGSpline, CGSpline)?
@@ -279,7 +282,7 @@ public struct CGSpline: Equatable {
         return result
     }
 
-    func intersections(with spline: CGSpline) -> [CGSpline] {
+    public func intersections(with spline: CGSpline) -> [CGSpline] {
         if points.count < 2 || spline.points.count < 2 {
             return []
         }
@@ -388,7 +391,7 @@ public struct CGSpline: Equatable {
                             result.append(c)
                         }
                         if i < validRoots.count - 1 {
-                            guard let (_, b, _) = group[1].split(at: CGFloat(validRoots[i]), and: CGFloat(validRoots[i+1])) else { assertionFailure();return [] }
+                            guard let b = group[1].split(at: [CGFloat(validRoots[i]), CGFloat(validRoots[i+1])])[safe: 1] else { assertionFailure();return [] }
                             result.append(b)
                         }
                     }
@@ -416,7 +419,11 @@ public struct CGSpline: Equatable {
         }
     }
 
-    private func crossings(with spline: CGSpline, count: Int = 0) -> [CGFloat] {
+    public func crossings(with spline: CGSpline) -> [CGFloat] {
+        return _crossings(with: spline)
+    }
+
+    private func _crossings(with spline: CGSpline, count: Int = 0) -> [CGFloat] {
         let length = zip(points, points.dropFirst()).reduce(0, {$0 + $1.0.distanceTo($1.1)})
         if length <= pow(10.0, CGFloat(-places)) {
             return [0]
@@ -430,7 +437,7 @@ public struct CGSpline: Equatable {
         guard let (section, minX, maxX) = clip(around: line, minimum: minimum, maximum: maximum) else {
             return [0]
         }
-        let result = spline.crossings(with: section, count: count + 1)
+        let result = spline._crossings(with: section, count: count + 1)
         let ratio = maxX - minX
         return result.map { r in
             return minX + r * ratio
@@ -438,8 +445,22 @@ public struct CGSpline: Equatable {
     }
 }
 
-public extension CGPath {
+public extension CGMutablePath {
+    func addSpline(spline: CGSpline) {
+        let points = spline.points
+        move(to: points[0])
+        switch spline.kind {
+        case .cubic:
+            addCurve(to: points[3], control1: points[1], control2: points[2])
+        case .quad:
+            addQuadCurve(to: points[2], control: points[1])
+        case .segment:
+            addLine(to: points[1])
+        }
+    }
+}
 
+public extension CGPath {
     var splines: [CGSpline] {
         var origin: CGPoint = .zero
         var prev: CGPoint = .zero
@@ -482,17 +503,28 @@ public extension CGPath {
         return result
     }
 
-    func intersections(with otherPath: CGPath) -> [CGSpline] {
-        return intersections(with: otherPath.splines)
-    }
-
-    func intersections(with otherSplines: [CGSpline]) -> [CGSpline] {
-        var result: [CGSpline] = []
+    func intersect(with path: CGPath) -> [CGPath] {
+        var result = [CGMutablePath]()
         for spline in splines {
-            for otherSpline in otherSplines {
-                result.append(contentsOf: spline.intersections(with: otherSpline))
+            var hasIntersections = false
+            for otherSpline in path.splines {
+                var intersections = spline.intersections(with: otherSpline)
+                if intersections.count > 1 {
+                    let first = intersections.removeFirst()
+                    result[result.count - 1].addSpline(spline: first)
+                    for intersection in intersections {
+                        let newPath = CGMutablePath()
+                        newPath.addSpline(spline: intersection)
+                        result.append(newPath)
+                    }
+                    hasIntersections = true
+                }
+            }
+            if !hasIntersections {
+                result[result.count - 1].addSpline(spline: spline)
             }
         }
+
         return result
     }
 }

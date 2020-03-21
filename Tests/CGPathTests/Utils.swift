@@ -101,7 +101,7 @@ public extension NSImage {
             let bitsPerComponent = imageRef.bitsPerComponent
             let bytesPerRow = imageRef.bytesPerRow
             let totalBytes = height * bytesPerRow
-//            let bitmapInfo = imageRef.bitmapInfo // Alpha acctually comes last, not premultiplied, see below
+//            let bitmapInfo = imageRef.bitmapInfo // Alpha actually comes last, not premultiplied, see below
 
             let colorSpace = CGColorSpaceCreateDeviceRGB()
             var intensities = [UInt8](repeating: 0, count: totalBytes)
