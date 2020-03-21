@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 
 private let places: Int = 6

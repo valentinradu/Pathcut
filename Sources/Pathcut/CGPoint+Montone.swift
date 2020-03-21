@@ -4,6 +4,8 @@
 //
 
 import Foundation
+import CoreGraphics
+
 
 public func cross(_ o: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
     let lhs = (a.x - o.x) * (b.y - o.y)
